@@ -1,15 +1,17 @@
 {
-  "name": "maker",
-  "version": "1.0.0",
-  "description": "A library to create dev cli",
-  "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "author": "",
-  "license": "ISC",
-  "dependencies": {
-    "@inquirer/prompts": "^8.2.0",
-    "pkg": "^5.8.1"
-  }
+	"name": "maker",
+	"version": "1.0.0",
+	"description": "A library to create dev cli",
+	"main": "index.js",
+	"author": "",
+	"license": "ISC",
+	"dependencies": {
+		"@inquirer/prompts": "^8.2.0",
+		"ora": "^9.3.0"
+	},
+	"devDependencies": {
+		"archiver": "^5.3.1",
+		"pkg": "^5.8.1",
+		"rimraf": "^5.0.1"
+	}
 }
