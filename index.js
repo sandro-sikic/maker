@@ -100,6 +100,8 @@ function run(command, opts = {}) {
  * - Returns a disposer function that removes the listener.
  */
 function onExit(cb) {
+	exiting = ora('Gracefully shutting down...').start();
+
 	if (typeof cb !== 'function') {
 		throw new TypeError('onExit requires a callback function');
 	}
@@ -114,6 +116,7 @@ function onExit(cb) {
 			console.error('onExit callback error:', err);
 		} finally {
 			// ensure we exit after callback finishes (0 = success)
+			exiting.stop();
 			process.exit(0);
 		}
 	};
