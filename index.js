@@ -1,4 +1,4 @@
-const inquirer = require('inquirer');
+const inquirer = require('@inquirer/prompts');
 const { spawn } = require('child_process');
 const path = require('path');
 const ora = require('ora');
