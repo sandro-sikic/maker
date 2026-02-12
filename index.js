@@ -94,9 +94,40 @@ function run(command, opts = {}) {
 	});
 }
 
+/**
+ * Register a callback to run when the process receives SIGINT (Ctrl+C).
+ * - Accepts a function (may be async).
+ * - Returns a disposer function that removes the listener.
+ */
+function onExit(cb) {
+	if (typeof cb !== 'function') {
+		throw new TypeError('onExit requires a callback function');
+	}
+
+	let called = false;
+	const handler = async () => {
+		if (called) return;
+		called = true;
+		try {
+			await Promise.resolve(cb());
+		} catch (err) {
+			console.error('onExit callback error:', err);
+		} finally {
+			// ensure we exit after callback finishes (0 = success)
+			process.exit(0);
+		}
+	};
+
+	process.on('SIGINT', handler);
+
+	// return a function that removes the listener in case the caller wants to cancel
+	return () => process.off('SIGINT', handler);
+}
+
 module.exports = {
 	init,
 	run,
+	onExit,
 	prompt: inquirer?.default || inquirer,
 	spinner: ora?.default || ora,
 };

@@ -14,6 +14,8 @@ export function run(
 	opts?: { maxLines?: number },
 ): Promise<RunResult>;
 
+export function onExit(cb: () => void | Promise<void>): () => void;
+
 // runtime-forwarded objects (exported as values in JS)
 export const prompt: typeof import('@inquirer/prompts');
 export const spinner: typeof import('ora');
