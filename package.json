@@ -1,0 +1,15 @@
+{
+  "name": "maker",
+  "version": "1.0.0",
+  "description": "A library to create dev cli",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@inquirer/prompts": "^8.2.0",
+    "pkg": "^5.8.1"
+  }
+}
