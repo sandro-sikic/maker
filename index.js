@@ -97,6 +97,6 @@ function run(command, opts = {}) {
 module.exports = {
 	init,
 	run,
-	prompt: inquirer,
-	spinner: ora,
+	prompt: inquirer?.default || inquirer,
+	spinner: ora?.default || ora,
 };
