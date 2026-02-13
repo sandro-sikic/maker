@@ -1,7 +1,31 @@
-const inquirer = require('@inquirer/prompts');
 const { spawn } = require('child_process');
 const path = require('path');
-const ora = require('ora');
+
+// small helper to lazily load (CJS-first, ESM dynamic import fallback)
+function makeLazyLoader(moduleId) {
+	let _cached = null;
+	return async function load() {
+		if (_cached) return _cached;
+		try {
+			/* eslint-disable global-require, import/no-dynamic-require */
+			const mod = require(moduleId);
+			_cached = mod && (mod.default || mod);
+			return _cached;
+		} catch (err) {
+			try {
+				const ns = await import(moduleId);
+				_cached = ns && (ns.default || ns);
+				return _cached;
+			} catch (e) {
+				// unable to load in this environment — return null so callers can continue
+				return null;
+			}
+		}
+	};
+}
+
+const loadPrompts = makeLazyLoader('@inquirer/prompts');
+const loadOra = makeLazyLoader('ora');
 
 function init() {
 	// Ensure we're running in an interactive terminal
@@ -98,15 +122,27 @@ function run(command, opts = {}) {
  * Register a callback to run when the process receives SIGINT (Ctrl+C).
  * - Accepts a function (may be async).
  * - Returns a disposer function that removes the listener.
+ *
+ * Note: spinner is started asynchronously (ora is lazy-loaded); onExit itself
+ * remains synchronous so callers can register the handler immediately.
  */
 function onExit(cb) {
-	exiting = ora('Gracefully shutting down...').start();
-
 	if (typeof cb !== 'function') {
 		throw new TypeError('onExit requires a callback function');
 	}
 
 	let called = false;
+	let exiting = null;
+
+	// start spinner asynchronously (best-effort; ignore load errors)
+	loadOra().then((o) => {
+		try {
+			exiting = o('Gracefully shutting down...').start();
+		} catch (e) {
+			/* ignore */
+		}
+	});
+
 	const handler = async () => {
 		if (called) return;
 		called = true;
@@ -115,8 +151,9 @@ function onExit(cb) {
 		} catch (err) {
 			console.error('onExit callback error:', err);
 		} finally {
-			// ensure we exit after callback finishes (0 = success)
-			exiting.stop();
+			if (exiting && typeof exiting.stop === 'function') {
+				exiting.stop();
+			}
 			process.exit(0);
 		}
 	};
@@ -127,10 +164,23 @@ function onExit(cb) {
 	return () => process.off('SIGINT', handler);
 }
 
+// `prompt` is an async wrapper around the ESM-only `@inquirer/prompts` package.
+// `prompt(...args)` forwards the call to the underlying module and returns its result.
+async function prompt(...args) {
+	const p = await loadPrompts();
+	if (!p) return null; // prompts unavailable in this environment
+	return p(...args);
+}
+
+async function spinner(...args) {
+	const s = await loadOra();
+	return s(...args);
+}
+
 module.exports = {
 	init,
 	run,
 	onExit,
-	prompt: inquirer?.default || inquirer,
-	spinner: ora?.default || ora,
+	prompt,
+	spinner,
 };
