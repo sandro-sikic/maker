@@ -1,4 +1,4 @@
-export function init(): void;
+export function init(opts?: { configPath?: string }): void;
 
 export type RunResult = {
 	output: string;

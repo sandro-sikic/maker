@@ -6,13 +6,17 @@ Quick reference guide for `@sandro-sikic/maker` functions.
 
 ## `init()`
 
-Validates interactive terminal environment. **Call first** in your CLI app.
+Validates interactive terminal environment. **Call first** in your CLI app. Accepts an optional options object `{ configPath?: string }` to override the location of `config.cfg`.
 
 ```javascript
+// default
 maker.init();
+
+// with options
+maker.init({ configPath: '/custom/path/config.cfg' });
 ```
 
-Exits with code 1 if not running in an interactive terminal (TTY).
+Exits with code 1 if not running in an interactive terminal (TTY). Passing a plain string is not supported.
 
 ---
 

@@ -4,8 +4,24 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-function init() {
-	// Ensure we're running in an interactive terminal
+let _overrideConfigPath = null;
+
+function init(opts) {
+	if (opts !== undefined) {
+		if (!opts || typeof opts !== 'object' || Array.isArray(opts)) {
+			throw new TypeError(
+				'init(opts) expects an options object (e.g. { configPath?: string })',
+			);
+		}
+
+		if (Object.prototype.hasOwnProperty.call(opts, 'configPath')) {
+			if (typeof opts.configPath !== 'string') {
+				throw new TypeError('init(opts).configPath must be a string');
+			}
+			_overrideConfigPath = opts.configPath;
+		}
+	}
+
 	if (!process.stdin.isTTY || !process.stdout.isTTY) {
 		console.error(
 			'\n⚠ This TUI requires an interactive terminal. Run this in a terminal (not the Node REPL or a non-interactive/debug console).\n',
@@ -150,11 +166,13 @@ function onExit(cb) {
 
 /**
  * Resolve path to the `config.cfg` file placed next to this module.
+ * If an override was provided to `init(opts)` return that path instead.
  * @returns {string}
  */
 function _configPath() {
+	if (_overrideConfigPath) return _overrideConfigPath;
 	const dir = path.dirname(fileURLToPath(import.meta.url));
-	return path.join(dir, 'config.cfg');
+	return path.join(dir, 'config.json');
 }
 
 /**

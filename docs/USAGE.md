@@ -28,18 +28,22 @@ loading.succeed('Installation complete!');
 
 ### `init()`
 
-Initializes the CLI environment and validates that the application is running in an interactive terminal (TTY). This should be called at the start of your CLI application.
+Initializes the CLI environment and validates that the application is running in an interactive terminal (TTY). This should be called at the start of your CLI application. You may pass an optional options object `{ configPath?: string }` to change where `config.cfg` is read/written.
 
 **Returns:** `void`
 
 **Throws:** Exits with code 1 if not running in an interactive terminal
 
-**Example:**
+**Examples:**
 
 ```javascript
 import { init } from '@sandro-sikic/maker';
 
-init(); // Call this first in your CLI app
+// default
+init();
+
+// override config file
+init({ configPath: '/custom/path/config.cfg' });
 ```
 
 **Why use it?**  

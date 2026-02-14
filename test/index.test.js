@@ -289,6 +289,10 @@ describe('init()', () => {
 		process.stdout.isTTY = origStdoutTTY;
 	});
 
+	it('throws when passed a string instead of an options object', () => {
+		expect(() => init('some/path/config.cfg')).toThrow(TypeError);
+	});
+
 	it('exits with code 1 and logs error when not in a TTY', () => {
 		const origStdinTTY = process.stdin.isTTY;
 		const origStdoutTTY = process.stdout.isTTY;
@@ -355,6 +359,23 @@ describe('config: save/load', () => {
 			await fs.rm(cfgPath);
 		} catch (e) {}
 		expect(load('nope')).toBeUndefined();
+	});
+
+	it('respects config path passed to init(opts)', async () => {
+		vi.resetModules();
+		const { init: freshInit, save: freshSave } = await import('../index.js');
+		const customPath = path.join(
+			path.dirname(fileURLToPath(new URL('../index.js', import.meta.url).href)),
+			'custom-config.cfg',
+		);
+		try {
+			await fs.rm(customPath);
+		} catch (e) {}
+		freshInit({ configPath: customPath });
+		freshSave('customKey', 'value');
+		const txt = await fs.readFile(customPath, 'utf8');
+		expect(JSON.parse(txt)).toEqual({ customKey: 'value' });
+		await fs.rm(customPath);
 	});
 });
 

@@ -47,13 +47,13 @@ loading.succeed('Project created! 🎉');
 
 ### Core Functions
 
-| Function             | Description                                        |
-| -------------------- | -------------------------------------------------- |
-| `init()`             | Validates interactive terminal environment         |
-| `run(command, opts)` | Executes shell commands with streaming output      |
-| `onExit(callback)`   | Registers cleanup function for graceful shutdown   |
-| `prompt.*`           | Interactive prompts (input, select, confirm, etc.) |
-| `spinner(text)`      | Creates terminal loading indicators                |
+| Function             | Description                                                                                             |
+| -------------------- | ------------------------------------------------------------------------------------------------------- |
+| `init(opts?)`        | Validates interactive terminal environment; accepts optional options object (`{ configPath?: string }`) |
+| `run(command, opts)` | Executes shell commands with streaming output                                                           |
+| `onExit(callback)`   | Registers cleanup function for graceful shutdown                                                        |
+| `prompt.*`           | Interactive prompts (input, select, confirm, etc.)                                                      |
+| `spinner(text)`      | Creates terminal loading indicators                                                                     |
 
 ### Example: Simple Build Tool
 
@@ -100,11 +100,17 @@ build();
 
 ### `init()`
 
-Ensures your CLI is running in an interactive terminal. Always call this first.
+Initializes CLI environment and validates your process is running in an interactive terminal. Call first in your CLI app. Accepts an optional options object: `{ configPath?: string }`.
 
 ```javascript
+// default
 maker.init();
+
+// override config file location
+maker.init({ configPath: '/path/to/config.cfg' });
 ```
+
+Note: passing a plain string to `init()` is not supported — use an options object instead.
 
 ### `run(command, opts)`
 
