@@ -1,6 +1,6 @@
 {
 	"name": "@sandro-sikic/maker",
-	"version": "1.0.7",
+	"version": "1.0.8",
 	"type": "module",
 	"description": "A library to create dev cli",
 	"main": "index.js",
