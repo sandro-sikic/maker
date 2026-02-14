@@ -11,7 +11,7 @@ export type RunResult = {
 
 export function run(
 	command: string,
-	opts?: { maxLines?: number },
+	opts?: Partial<import('child_process').SpawnOptions> & { maxLines?: number },
 ): Promise<RunResult>;
 
 export function onExit(cb: () => void | Promise<void>): () => void;

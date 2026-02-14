@@ -18,9 +18,10 @@ function init() {
  * task; if you `await run(...)` (use inside an async function) the caller will wait for completion
  * and the call behaves like a foreground task.
  *
- * @param {string} command - Shell command to execute (will be run with `shell: true`).
+ * @param {string} command - Shell command to execute.
  * @param {Object} [opts]
- * @param {number} [opts.maxLines=10000] - Maximum number of lines to retain in captured output.
+ * @param {number} [opts.maxLines=10000] - Maximum number of lines to retain in captured output. (capture-only; not forwarded to the spawned process)
+ * @param {Object} [opts] - Options forwarded directly to `child_process.spawn` (e.g. `cwd`, `env`, `stdio`).
  * @returns {Promise<{output:string, stdout:string, stderr:string, code:number|null, isError:boolean, error:Error|null}>}
  */
 async function run(command, opts = {}) {
@@ -28,9 +29,18 @@ async function run(command, opts = {}) {
 		throw new TypeError('run() requires a non-empty string command');
 	}
 
-	const { maxLines = 10000 } = opts;
+	// extract maxLines (used for capturing) and forward the rest of opts directly to spawn
+	const { maxLines = 10000, ...forwardedOpts } = opts;
+
 	// import spawn at runtime so test mocks (vi.mock) take effect per-test
 	const { spawn } = await import('child_process');
+
+	// Merge defaults with the caller-provided options. Caller options are forwarded
+	// directly to spawn; `maxLines` is used only for output capture (not forwarded).
+	const spawnOpts = Object.assign(
+		{ shell: true, stdio: 'pipe' },
+		forwardedOpts,
+	);
 
 	function trimToLastNLines(s, n) {
 		if (!s) return s;
@@ -44,7 +54,7 @@ async function run(command, opts = {}) {
 	}
 
 	return new Promise((resolve) => {
-		const child = spawn(command, { shell: true, stdio: 'pipe' });
+		const child = spawn(command, spawnOpts);
 
 		let stdout = '';
 		let stderr = '';

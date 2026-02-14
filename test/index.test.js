@@ -405,6 +405,63 @@ describe('run() - additional edge cases', () => {
 		vi.resetModules();
 	});
 
+	it('forwards opts directly to spawn (no alias)', async () => {
+		vi.resetModules();
+		let captured;
+		vi.doMock('child_process', () => ({
+			spawn: (cmd, spawnOpts) => {
+				captured = spawnOpts;
+				const child = {
+					stdout: { on: () => {} },
+					stderr: { on: () => {} },
+					on: (ev, cb) => {
+						if (ev === 'close') cb(0);
+					},
+				};
+				return child;
+			},
+		}));
+		const { run: mockedRun } = await import('../index.js');
+		const res = await mockedRun('anything', {
+			cwd: '/tmp',
+			env: { FOO: 'bar' },
+		});
+		expect(captured.cwd).toBe('/tmp');
+		expect(captured.env).toEqual(expect.objectContaining({ FOO: 'bar' }));
+		expect(captured.shell).toBe(true);
+		expect(captured.stdio).toBe('pipe');
+		expect(res.code).toBe(0);
+		vi.resetModules();
+	});
+
+	it('forwards top-level spawn options (maxLines is capture-only)', async () => {
+		vi.resetModules();
+		let captured;
+		vi.doMock('child_process', () => ({
+			spawn: (cmd, spawnOpts) => {
+				captured = spawnOpts;
+				const child = {
+					stdout: { on: () => {} },
+					stderr: { on: () => {} },
+					on: (ev, cb) => {
+						if (ev === 'close') cb(0);
+					},
+				};
+				return child;
+			},
+		}));
+		const { run: mockedRun } = await import('../index.js');
+		const res = await mockedRun('anything', {
+			cwd: '/cwd',
+			maxLines: 5,
+			shell: false,
+		});
+		expect(captured.cwd).toBe('/cwd');
+		expect(captured.maxLines).toBeUndefined();
+		expect(captured.shell).toBe(false);
+		expect(res.code).toBe(0);
+		vi.resetModules();
+	});
 	it('handles multiple data chunks correctly', async () => {
 		vi.resetModules();
 		vi.doMock('child_process', () => ({

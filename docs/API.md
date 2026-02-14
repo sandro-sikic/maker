@@ -21,13 +21,17 @@ Exits with code 1 if not running in an interactive terminal (TTY).
 Execute shell commands with streaming output.
 
 ```javascript
-const result = await run('npm install', { maxLines: 10000 });
+const result = await run('npm install', {
+	maxLines: 10000,
+	cwd: process.cwd(),
+});
 ```
 
 **Parameters:**
 
 - `command` - Shell command string (required)
-- `opts.maxLines` - Max output lines to capture (default: 10000)
+- `opts.maxLines` - Max output lines to capture (default: 10000). This option is used only for capturing output and is not forwarded to the spawned process.
+- `opts` (other properties) - Any additional top-level properties are forwarded directly to `child_process.spawn` (e.g. `cwd`, `env`, `stdio`).
 
 **Returns:**
 
