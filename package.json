@@ -1,10 +1,29 @@
 {
 	"name": "@sandro-sikic/maker",
-	"version": "1.0.9",
+	"version": "1.0.10",
 	"type": "module",
-	"description": "A library to create dev cli",
+	"description": "A lightweight library for building interactive command-line tools with prompts, command execution, spinners, and graceful shutdown handling",
 	"main": "index.js",
 	"types": "index.d.ts",
+	"keywords": [
+		"cli",
+		"command-line",
+		"interactive",
+		"terminal",
+		"prompts",
+		"inquirer",
+		"spinner",
+		"ora",
+		"shell",
+		"command-execution",
+		"developer-tools",
+		"cli-builder",
+		"tty",
+		"typescript",
+		"graceful-shutdown",
+		"cli-framework",
+		"build-tools"
+	],
 	"scripts": {
 		"test": "vitest"
 	},
