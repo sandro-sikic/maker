@@ -1,5 +1,8 @@
 import * as inquirer from '@inquirer/prompts';
 import * as ora from 'ora';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
 function init() {
 	// Ensure we're running in an interactive terminal
@@ -145,7 +148,70 @@ function onExit(cb) {
 	};
 }
 
+/**
+ * Resolve path to the `config.cfg` file placed next to this module.
+ * @returns {string}
+ */
+function _configPath() {
+	const dir = path.dirname(fileURLToPath(import.meta.url));
+	return path.join(dir, 'config.cfg');
+}
+
+/**
+ * Save a value under `key` in `config.cfg` (creates file if missing).
+ * - Overwrites existing keys
+ * - Accepts objects and primitives (stored as JSON)
+ *
+ * @param {string} key
+ * @param {*} value
+ * @returns {void}
+ */
+function save(key, value) {
+	if (typeof key !== 'string' || !key) {
+		throw new TypeError('save(key, value) requires a non-empty string key');
+	}
+
+	const file = _configPath();
+	let cfg = {};
+	try {
+		const txt = fs.readFileSync(file, 'utf8');
+		cfg = txt.trim() ? JSON.parse(txt) : {};
+	} catch (err) {
+		if (err && err.code !== 'ENOENT') throw err;
+		cfg = {};
+	}
+
+	cfg[key] = value;
+	fs.writeFileSync(file, JSON.stringify(cfg, null, 2), 'utf8');
+}
+
+/**
+ * Load a value by `key` from `config.cfg` located next to this module.
+ * Returns undefined when the file or key does not exist.
+ *
+ * @param {string} key
+ * @returns {*|undefined}
+ */
+function load(key) {
+	if (typeof key !== 'string' || !key) {
+		throw new TypeError('load(key) requires a non-empty string key');
+	}
+
+	const file = _configPath();
+	try {
+		const txt = fs.readFileSync(file, 'utf8');
+		if (!txt.trim()) return undefined;
+		const cfg = JSON.parse(txt);
+		return Object.prototype.hasOwnProperty.call(cfg, key)
+			? cfg[key]
+			: undefined;
+	} catch (err) {
+		if (err && err.code === 'ENOENT') return undefined;
+		throw err;
+	}
+}
+
 const prompt = inquirer.default ?? inquirer;
 const spinner = ora.default ?? ora;
 
-export { init, run, onExit, prompt, spinner };
+export { init, run, onExit, prompt, spinner, save, load };

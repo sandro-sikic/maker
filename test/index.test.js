@@ -4,7 +4,11 @@ vi.mock('ora', () => ({
 	default: () => ({ start: () => ({ stop: () => {} }) }),
 }));
 
-import { run, onExit, init, prompt, spinner } from '../index.js';
+import { promises as fs } from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+import { run, onExit, init, prompt, spinner, save, load } from '../index.js';
 
 describe('run()', () => {
 	it('captures stdout for successful commands (mocked)', async () => {
@@ -311,6 +315,46 @@ describe('exports', () => {
 		const s = spinner('x');
 		expect(typeof s.start).toBe('function');
 		expect(typeof s.start().stop).toBe('function');
+	});
+});
+
+describe('config: save/load', () => {
+	const cfgPath = path.join(
+		path.dirname(fileURLToPath(new URL('../index.js', import.meta.url).href)),
+		'config.cfg',
+	);
+
+	afterEach(async () => {
+		try {
+			await fs.rm(cfgPath);
+		} catch (e) {
+			// ignore
+		}
+	});
+
+	it('creates file and saves/loads primitive value', async () => {
+		save('foo', 'bar');
+		expect(load('foo')).toBe('bar');
+		const txt = await fs.readFile(cfgPath, 'utf8');
+		expect(JSON.parse(txt)).toEqual({ foo: 'bar' });
+	});
+
+	it('accepts and returns object values', async () => {
+		save('obj', { a: 1, b: 'x' });
+		expect(load('obj')).toEqual({ a: 1, b: 'x' });
+	});
+
+	it('overwrites existing key', async () => {
+		save('k', 'v1');
+		save('k', 'v2');
+		expect(load('k')).toBe('v2');
+	});
+
+	it('returns undefined for missing key or missing file', async () => {
+		try {
+			await fs.rm(cfgPath);
+		} catch (e) {}
+		expect(load('nope')).toBeUndefined();
 	});
 });
 

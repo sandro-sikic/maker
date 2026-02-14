@@ -15,6 +15,8 @@ export function run(
 ): Promise<RunResult>;
 
 export function onExit(cb: () => void | Promise<void>): () => void;
+export function save(key: string, value: unknown): void;
+export function load<T = unknown>(key: string): T | undefined;
 
 export const prompt: typeof import('@inquirer/prompts');
 export const spinner: typeof import('ora');
