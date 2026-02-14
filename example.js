@@ -1,4 +1,4 @@
-const maker = require('./index.js');
+import * as maker from './index.js';
 
 (async () => {
 	maker.init();

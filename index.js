@@ -1,7 +1,7 @@
-const { spawn } = require('child_process');
-const path = require('path');
-const inquirer = require('@inquirer/prompts');
-const ora = require('ora');
+import { spawn } from 'child_process';
+import path from 'path';
+import * as inquirer from '@inquirer/prompts';
+import * as ora from 'ora';
 
 function init() {
 	// Ensure we're running in an interactive terminal
@@ -102,7 +102,7 @@ function onExit(cb) {
 	let called = false;
 	let exiting = null;
 
-	exiting = ora('Gracefully shutting down...').start();
+	exiting = spinner('Gracefully shutting down...').start();
 
 	const handler = async () => {
 		if (called) return;
@@ -124,10 +124,7 @@ function onExit(cb) {
 	return () => process.off('SIGINT', handler);
 }
 
-module.exports = {
-	init,
-	run,
-	onExit,
-	prompt: inquirer.default || inquirer,
-	spinner: ora.default || ora,
-};
+const prompt = inquirer.default ?? inquirer;
+const spinner = ora.default ?? ora;
+
+export { init, run, onExit, prompt, spinner };
