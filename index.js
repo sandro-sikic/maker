@@ -1,4 +1,3 @@
-import { spawn } from 'child_process';
 import path from 'path';
 import * as inquirer from '@inquirer/prompts';
 import * as ora from 'ora';
@@ -25,17 +24,23 @@ function init() {
  * @param {number} [opts.maxLines=10000] - Maximum number of lines to retain in captured output.
  * @returns {Promise<{output:string, stdout:string, stderr:string, code:number|null, isError:boolean, error:Error|null}>}
  */
-function run(command, opts = {}) {
+async function run(command, opts = {}) {
 	const { maxLines = 10000 } = opts;
-	const normalized = path.normalize(command);
-	const split = normalized.split('/');
-	const convertedCommand = path.join(...split);
+	// import spawn at runtime so test mocks (vi.mock) take effect per-test
+	const { spawn } = await import('child_process');
+	// don't normalize the full command string — pass it through unchanged so shell
+	// quoting and platform-specific behavior remain intact.
+	const convertedCommand = command;
 
 	function trimToLastNLines(s, n) {
 		if (!s) return s;
-		const lines = s.split(/\r?\n/);
-		if (lines.length <= n) return s;
-		return lines.slice(-n).join('\n');
+		// remove trailing newlines for accurate line counting
+		const hadTrailingNewline = /(?:\r?\n)$/.test(s);
+		const trimmed = s.replace(/(?:\r?\n)+$/g, '');
+		const lines = trimmed.split(/\r?\n/);
+		if (lines.length <= n) return hadTrailingNewline ? trimmed + '\n' : trimmed;
+		const out = lines.slice(-n).join('\n');
+		return hadTrailingNewline ? out + '\n' : out;
 	}
 
 	return new Promise((resolve) => {
