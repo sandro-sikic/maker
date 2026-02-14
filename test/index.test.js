@@ -674,3 +674,488 @@ describe('init() - additional edge cases', () => {
 		process.stdout.isTTY = origStdoutTTY;
 	});
 });
+
+describe('run() - enhanced edge cases', () => {
+	it('trims correctly when exceeding maxLines during streaming', async () => {
+		vi.resetModules();
+		vi.doMock('child_process', () => ({
+			spawn: () => {
+				let stdoutCb;
+				let closeCb;
+				const child = {
+					stdout: {
+						on: (ev, cb) => {
+							if (ev === 'data') stdoutCb = cb;
+						},
+					},
+					stderr: { on: () => {} },
+					on: (ev, cb) => {
+						if (ev === 'close') closeCb = cb;
+					},
+				};
+				process.nextTick(() => {
+					if (stdoutCb) {
+						// Send 15 lines in 3 batches
+						stdoutCb(Buffer.from('1\n2\n3\n4\n5\n'));
+						stdoutCb(Buffer.from('6\n7\n8\n9\n10\n'));
+						stdoutCb(Buffer.from('11\n12\n13\n14\n15\n'));
+					}
+					if (closeCb) closeCb(0);
+				});
+				return child;
+			},
+		}));
+		const { run: mockedRun } = await import('../index.js');
+		const res = await mockedRun('anything', { maxLines: 5 });
+		// Should only have last 5 lines
+		expect(res.stdout).toMatch(/11/);
+		expect(res.stdout).toMatch(/15/);
+		expect(res.stdout).not.toMatch(/^1$/m);
+		expect(res.stdout).not.toMatch(/^5$/m);
+		vi.resetModules();
+	});
+
+	it('handles both stdout and stderr with different line counts and trimming', async () => {
+		vi.resetModules();
+		vi.doMock('child_process', () => ({
+			spawn: () => {
+				let stdoutCb;
+				let stderrCb;
+				let closeCb;
+				const child = {
+					stdout: {
+						on: (ev, cb) => {
+							if (ev === 'data') stdoutCb = cb;
+						},
+					},
+					stderr: {
+						on: (ev, cb) => {
+							if (ev === 'data') stderrCb = cb;
+						},
+					},
+					on: (ev, cb) => {
+						if (ev === 'close') closeCb = cb;
+					},
+				};
+				process.nextTick(() => {
+					// stdout: 10 lines
+					if (stdoutCb) {
+						stdoutCb(
+							Buffer.from(
+								Array.from({ length: 10 })
+									.map((_, i) => `out${i}`)
+									.join('\n') + '\n',
+							),
+						);
+					}
+					// stderr: 8 lines
+					if (stderrCb) {
+						stderrCb(
+							Buffer.from(
+								Array.from({ length: 8 })
+									.map((_, i) => `err${i}`)
+									.join('\n') + '\n',
+							),
+						);
+					}
+					if (closeCb) closeCb(0);
+				});
+				return child;
+			},
+		}));
+		const { run: mockedRun } = await import('../index.js');
+		const res = await mockedRun('anything', { maxLines: 3 });
+		expect(res.stdout).toMatch(/out7/);
+		expect(res.stdout).toMatch(/out9/);
+		expect(res.stdout).not.toMatch(/out0/);
+		expect(res.stderr).toMatch(/err5/);
+		expect(res.stderr).toMatch(/err7/);
+		expect(res.stderr).not.toMatch(/err0/);
+		vi.resetModules();
+	});
+
+	it('handles output with only newlines', async () => {
+		vi.resetModules();
+		vi.doMock('child_process', () => ({
+			spawn: () => {
+				let stdoutCb;
+				let closeCb;
+				const child = {
+					stdout: {
+						on: (ev, cb) => {
+							if (ev === 'data') stdoutCb = cb;
+						},
+					},
+					stderr: { on: () => {} },
+					on: (ev, cb) => {
+						if (ev === 'close') closeCb = cb;
+					},
+				};
+				process.nextTick(() => {
+					if (stdoutCb) stdoutCb(Buffer.from('\n\n\n'));
+					if (closeCb) closeCb(0);
+				});
+				return child;
+			},
+		}));
+		const { run: mockedRun } = await import('../index.js');
+		const res = await mockedRun('anything');
+		// trimToLastNLines removes trailing newlines, processes lines, then adds back one
+		expect(res.stdout).toBe('\n');
+		expect(res.isError).toBe(false);
+		vi.resetModules();
+	});
+
+	it('handles empty stdout and stderr', async () => {
+		vi.resetModules();
+		vi.doMock('child_process', () => ({
+			spawn: () => {
+				let closeCb;
+				const child = {
+					stdout: { on: () => {} },
+					stderr: { on: () => {} },
+					on: (ev, cb) => {
+						if (ev === 'close') closeCb = cb;
+					},
+				};
+				process.nextTick(() => {
+					if (closeCb) closeCb(0);
+				});
+				return child;
+			},
+		}));
+		const { run: mockedRun } = await import('../index.js');
+		const res = await mockedRun('anything');
+		expect(res.stdout).toBe('');
+		expect(res.stderr).toBe('');
+		expect(res.output).toBe('');
+		expect(res.isError).toBe(false);
+		vi.resetModules();
+	});
+
+	it('handles very long single line without newline', async () => {
+		vi.resetModules();
+		vi.doMock('child_process', () => ({
+			spawn: () => {
+				let stdoutCb;
+				let closeCb;
+				const child = {
+					stdout: {
+						on: (ev, cb) => {
+							if (ev === 'data') stdoutCb = cb;
+						},
+					},
+					stderr: { on: () => {} },
+					on: (ev, cb) => {
+						if (ev === 'close') closeCb = cb;
+					},
+				};
+				process.nextTick(() => {
+					if (stdoutCb) stdoutCb(Buffer.from('x'.repeat(10000)));
+					if (closeCb) closeCb(0);
+				});
+				return child;
+			},
+		}));
+		const { run: mockedRun } = await import('../index.js');
+		const res = await mockedRun('anything');
+		expect(res.stdout.length).toBe(10000);
+		expect(res.stdout).toBe('x'.repeat(10000));
+		vi.resetModules();
+	});
+
+	it('properly handles exit code 127 (command not found)', async () => {
+		vi.resetModules();
+		vi.doMock('child_process', () => ({
+			spawn: () => {
+				let stderrCb;
+				let closeCb;
+				const child = {
+					stdout: { on: () => {} },
+					stderr: {
+						on: (ev, cb) => {
+							if (ev === 'data') stderrCb = cb;
+						},
+					},
+					on: (ev, cb) => {
+						if (ev === 'close') closeCb = cb;
+					},
+				};
+				process.nextTick(() => {
+					if (stderrCb) stderrCb(Buffer.from('command not found\n'));
+					if (closeCb) closeCb(127);
+				});
+				return child;
+			},
+		}));
+		const { run: mockedRun } = await import('../index.js');
+		const res = await mockedRun('nonexistent-cmd');
+		expect(res.isError).toBe(true);
+		expect(res.code).toBe(127);
+		expect(res.stderr).toMatch(/command not found/);
+		vi.resetModules();
+	});
+
+	it('handles alternating stdout/stderr chunks', async () => {
+		vi.resetModules();
+		vi.doMock('child_process', () => ({
+			spawn: () => {
+				let stdoutCb;
+				let stderrCb;
+				let closeCb;
+				const child = {
+					stdout: {
+						on: (ev, cb) => {
+							if (ev === 'data') stdoutCb = cb;
+						},
+					},
+					stderr: {
+						on: (ev, cb) => {
+							if (ev === 'data') stderrCb = cb;
+						},
+					},
+					on: (ev, cb) => {
+						if (ev === 'close') closeCb = cb;
+					},
+				};
+				process.nextTick(() => {
+					if (stdoutCb) stdoutCb(Buffer.from('out1\n'));
+					if (stderrCb) stderrCb(Buffer.from('err1\n'));
+					if (stdoutCb) stdoutCb(Buffer.from('out2\n'));
+					if (stderrCb) stderrCb(Buffer.from('err2\n'));
+					if (closeCb) closeCb(0);
+				});
+				return child;
+			},
+		}));
+		const { run: mockedRun } = await import('../index.js');
+		const res = await mockedRun('anything');
+		expect(res.stdout).toContain('out1');
+		expect(res.stdout).toContain('out2');
+		expect(res.stderr).toContain('err1');
+		expect(res.stderr).toContain('err2');
+		expect(res.output).toContain('out1');
+		expect(res.output).toContain('err1');
+		vi.resetModules();
+	});
+
+	it('handles maxLines of 1 correctly', async () => {
+		vi.resetModules();
+		vi.doMock('child_process', () => ({
+			spawn: () => {
+				let stdoutCb;
+				let closeCb;
+				const child = {
+					stdout: {
+						on: (ev, cb) => {
+							if (ev === 'data') stdoutCb = cb;
+						},
+					},
+					stderr: { on: () => {} },
+					on: (ev, cb) => {
+						if (ev === 'close') closeCb = cb;
+					},
+				};
+				process.nextTick(() => {
+					if (stdoutCb) stdoutCb(Buffer.from('line1\nline2\nline3\n'));
+					if (closeCb) closeCb(0);
+				});
+				return child;
+			},
+		}));
+		const { run: mockedRun } = await import('../index.js');
+		const res = await mockedRun('anything', { maxLines: 1 });
+		expect(res.stdout).toBe('line3\n');
+		expect(res.stdout).not.toContain('line1');
+		expect(res.stdout).not.toContain('line2');
+		vi.resetModules();
+	});
+
+	it('handles mixed line endings (LF and CRLF)', async () => {
+		vi.resetModules();
+		vi.doMock('child_process', () => ({
+			spawn: () => {
+				let stdoutCb;
+				let closeCb;
+				const child = {
+					stdout: {
+						on: (ev, cb) => {
+							if (ev === 'data') stdoutCb = cb;
+						},
+					},
+					stderr: { on: () => {} },
+					on: (ev, cb) => {
+						if (ev === 'close') closeCb = cb;
+					},
+				};
+				process.nextTick(() => {
+					if (stdoutCb) stdoutCb(Buffer.from('unix\nwindows\r\nunix2\n'));
+					if (closeCb) closeCb(0);
+				});
+				return child;
+			},
+		}));
+		const { run: mockedRun } = await import('../index.js');
+		const res = await mockedRun('anything');
+		expect(res.stdout).toContain('unix\n');
+		expect(res.stdout).toContain('windows\r\n');
+		expect(res.stdout).toContain('unix2');
+		vi.resetModules();
+	});
+
+	it('handles trailing multiple newlines correctly when trimming', async () => {
+		vi.resetModules();
+		vi.doMock('child_process', () => ({
+			spawn: () => {
+				let stdoutCb;
+				let closeCb;
+				const child = {
+					stdout: {
+						on: (ev, cb) => {
+							if (ev === 'data') stdoutCb = cb;
+						},
+					},
+					stderr: { on: () => {} },
+					on: (ev, cb) => {
+						if (ev === 'close') closeCb = cb;
+					},
+				};
+				process.nextTick(() => {
+					if (stdoutCb) {
+						// 10 lines followed by multiple trailing newlines
+						stdoutCb(
+							Buffer.from(
+								Array.from({ length: 10 })
+									.map((_, i) => i)
+									.join('\n') + '\n\n\n\n',
+							),
+						);
+					}
+					if (closeCb) closeCb(0);
+				});
+				return child;
+			},
+		}));
+		const { run: mockedRun } = await import('../index.js');
+		const res = await mockedRun('anything', { maxLines: 5 });
+		expect(res.stdout).toMatch(/5/);
+		expect(res.stdout).toMatch(/9/);
+		// Trailing newline should be preserved
+		expect(res.stdout).toMatch(/\n$/);
+		vi.resetModules();
+	});
+});
+
+describe('onExit() - enhanced edge cases', () => {
+	it('handles callback that returns a value (not a promise)', async () => {
+		const cb = vi.fn(() => 42);
+		const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {});
+		const off = onExit(cb);
+		process.emit('SIGINT');
+		await new Promise((r) => setTimeout(r, 10));
+		expect(cb).toHaveBeenCalled();
+		expect(exitSpy).toHaveBeenCalledWith(0);
+		off();
+		exitSpy.mockRestore();
+	});
+
+	it('handles callback throwing synchronously', async () => {
+		const cb = vi.fn(() => {
+			throw new Error('sync error');
+		});
+		const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {});
+		const off = onExit(cb);
+		process.emit('SIGINT');
+		await new Promise((r) => setTimeout(r, 10));
+		expect(cb).toHaveBeenCalled();
+		expect(consoleSpy).toHaveBeenCalledWith(
+			'onExit callback error:',
+			expect.any(Error),
+		);
+		expect(exitSpy).toHaveBeenCalledWith(0);
+		off();
+		consoleSpy.mockRestore();
+		exitSpy.mockRestore();
+	});
+
+	it('handles spinner that does not have a stop method', async () => {
+		const mockSpinner = vi.fn(() => ({ start: () => ({}) })); // No stop method
+
+		vi.resetModules();
+		vi.doMock('ora', () => ({
+			default: mockSpinner,
+		}));
+
+		const { onExit: mockedOnExit } = await import('../index.js');
+		const cb = vi.fn(async () => {});
+		const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {});
+
+		const off = mockedOnExit(cb);
+		process.emit('SIGINT');
+		await new Promise((r) => setTimeout(r, 10));
+
+		// Should not throw, should still exit
+		expect(cb).toHaveBeenCalled();
+		expect(exitSpy).toHaveBeenCalledWith(0);
+
+		off();
+		exitSpy.mockRestore();
+		vi.resetModules();
+	});
+
+	it('throws TypeError with descriptive message for non-function', () => {
+		expect(() => onExit(null)).toThrow(TypeError);
+		expect(() => onExit(null)).toThrow('onExit requires a callback function');
+		expect(() => onExit(undefined)).toThrow(TypeError);
+		expect(() => onExit('string')).toThrow(TypeError);
+		expect(() => onExit({})).toThrow(TypeError);
+	});
+
+	it('can be called with an async arrow function', async () => {
+		const cb = vi.fn(async () => {
+			await new Promise((r) => setTimeout(r, 5));
+		});
+		const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {});
+		const off = onExit(cb);
+		process.emit('SIGINT');
+		await new Promise((r) => setTimeout(r, 15));
+		expect(cb).toHaveBeenCalled();
+		expect(exitSpy).toHaveBeenCalledWith(0);
+		off();
+		exitSpy.mockRestore();
+	});
+
+	it('unsubscribe can be called multiple times safely', () => {
+		const cb = vi.fn();
+		const off = onExit(cb);
+		off(); // First unsubscribe
+		off(); // Second unsubscribe - should not throw
+		process.emit('SIGINT');
+		expect(cb).not.toHaveBeenCalled();
+	});
+});
+
+describe('prompt and spinner re-exports', () => {
+	it('prompt re-export handles default export', () => {
+		expect(prompt).toBeDefined();
+		// prompt should be the inquirer object or its default
+		expect(typeof prompt).toBeTruthy();
+	});
+
+	it('spinner creates a spinner with correct API', () => {
+		const s = spinner('Loading...');
+		expect(s).toBeDefined();
+		expect(typeof s.start).toBe('function');
+		const started = s.start();
+		expect(typeof started.stop).toBe('function');
+	});
+
+	it('spinner can be started and stopped multiple times', () => {
+		const s = spinner('Test');
+		const started1 = s.start();
+		started1.stop();
+		const started2 = s.start();
+		expect(typeof started2.stop).toBe('function');
+	});
+});

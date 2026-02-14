@@ -1,4 +1,3 @@
-import path from 'path';
 import * as inquirer from '@inquirer/prompts';
 import * as ora from 'ora';
 
@@ -6,7 +5,7 @@ function init() {
 	// Ensure we're running in an interactive terminal
 	if (!process.stdin.isTTY || !process.stdout.isTTY) {
 		console.error(
-			'\n️This TUI requires an interactive terminal. Run this in a terminal (not the Node REPL or a non-interactive/debug console).\n',
+			'\n⚠ This TUI requires an interactive terminal. Run this in a terminal (not the Node REPL or a non-interactive/debug console).\n',
 		);
 		process.exit(1);
 	}
@@ -25,12 +24,13 @@ function init() {
  * @returns {Promise<{output:string, stdout:string, stderr:string, code:number|null, isError:boolean, error:Error|null}>}
  */
 async function run(command, opts = {}) {
+	if (typeof command !== 'string' || !command.trim()) {
+		throw new TypeError('run() requires a non-empty string command');
+	}
+
 	const { maxLines = 10000 } = opts;
 	// import spawn at runtime so test mocks (vi.mock) take effect per-test
 	const { spawn } = await import('child_process');
-	// don't normalize the full command string — pass it through unchanged so shell
-	// quoting and platform-specific behavior remain intact.
-	const convertedCommand = command;
 
 	function trimToLastNLines(s, n) {
 		if (!s) return s;
@@ -44,7 +44,7 @@ async function run(command, opts = {}) {
 	}
 
 	return new Promise((resolve) => {
-		const child = spawn(convertedCommand, { shell: true, stdio: 'pipe' });
+		const child = spawn(command, { shell: true, stdio: 'pipe' });
 
 		let stdout = '';
 		let stderr = '';
@@ -105,13 +105,13 @@ function onExit(cb) {
 	}
 
 	let called = false;
-	let exiting = null;
-
-	exiting = spinner('Gracefully shutting down...').start();
 
 	const handler = async () => {
 		if (called) return;
 		called = true;
+
+		const exiting = spinner('Gracefully shutting down...').start();
+
 		try {
 			await Promise.resolve(cb());
 		} catch (err) {
@@ -125,8 +125,14 @@ function onExit(cb) {
 	};
 
 	process.on('SIGINT', handler);
+	process.on('SIGTERM', handler);
+	process.on('SIGQUIT', handler);
 
-	return () => process.off('SIGINT', handler);
+	return () => {
+		process.off('SIGINT', handler);
+		process.off('SIGTERM', handler);
+		process.off('SIGQUIT', handler);
+	};
 }
 
 const prompt = inquirer.default ?? inquirer;
