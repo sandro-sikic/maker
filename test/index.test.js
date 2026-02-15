@@ -310,6 +310,38 @@ describe('init()', () => {
 		process.stdin.isTTY = origStdinTTY;
 		process.stdout.isTTY = origStdoutTTY;
 	});
+
+	it('clears generated storage types file when present', async () => {
+		const genPath = path.join(
+			path.dirname(fileURLToPath(new URL('../index.js', import.meta.url).href)),
+			'storage.generated.d.ts',
+		);
+
+		// create a dummy generated file
+		await fs.writeFile(genPath, '/* generated */', 'utf8');
+
+		const origStdinTTY = process.stdin.isTTY;
+		const origStdoutTTY = process.stdout.isTTY;
+		process.stdin.isTTY = true;
+		process.stdout.isTTY = true;
+
+		try {
+			init();
+			let exists = true;
+			try {
+				await fs.access(genPath);
+			} catch (e) {
+				exists = false;
+			}
+			expect(exists).toBe(false);
+		} finally {
+			process.stdin.isTTY = origStdinTTY;
+			process.stdout.isTTY = origStdoutTTY;
+			try {
+				await fs.rm(genPath);
+			} catch (e) {}
+		}
+	});
 });
 
 describe('exports', () => {
