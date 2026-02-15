@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 
 vi.mock('ora', () => ({
 	default: () => ({ start: () => ({ stop: () => {} }) }),
@@ -11,6 +11,24 @@ import { fileURLToPath } from 'url';
 import { run, onExit, init, prompt, spinner, save, load } from '../index.js';
 
 describe('run()', () => {
+	it('throws TypeError when command is not a string', async () => {
+		await expect(run(null)).rejects.toThrow(TypeError);
+		await expect(run(undefined)).rejects.toThrow(TypeError);
+		await expect(run(123)).rejects.toThrow(TypeError);
+		await expect(run({})).rejects.toThrow(TypeError);
+		await expect(run([])).rejects.toThrow(TypeError);
+	});
+
+	it('throws TypeError when command is an empty string', async () => {
+		await expect(run('')).rejects.toThrow(TypeError);
+		await expect(run('')).rejects.toThrow(/non-empty string/);
+	});
+
+	it('throws TypeError when command is only whitespace', async () => {
+		await expect(run('   ')).rejects.toThrow(TypeError);
+		await expect(run('\t\n')).rejects.toThrow(TypeError);
+	});
+
 	it('captures stdout for successful commands (mocked)', async () => {
 		vi.resetModules();
 		vi.doMock('child_process', () => ({
@@ -289,8 +307,23 @@ describe('init()', () => {
 		process.stdout.isTTY = origStdoutTTY;
 	});
 
-	it('throws when passed a string instead of an options object', () => {
+	it('throws when passed a non-object argument', () => {
 		expect(() => init('some/path/config.cfg')).toThrow(TypeError);
+		expect(() => init(123)).toThrow(TypeError);
+		expect(() => init(true)).toThrow(TypeError);
+		expect(() => init(null)).toThrow(TypeError);
+	});
+
+	it('throws when passed an array instead of object', () => {
+		expect(() => init([])).toThrow(TypeError);
+		expect(() => init(['path'])).toThrow(TypeError);
+	});
+
+	it('throws TypeError when configPath is not a string', () => {
+		expect(() => init({ configPath: 123 })).toThrow(TypeError);
+		expect(() => init({ configPath: {} })).toThrow(TypeError);
+		expect(() => init({ configPath: null })).toThrow(TypeError);
+		expect(() => init({ configPath: true })).toThrow(TypeError);
 	});
 
 	it('exits with code 1 and logs error when not in a TTY', () => {
@@ -357,7 +390,7 @@ describe('exports', () => {
 describe('config: save/load', () => {
 	const cfgPath = path.join(
 		path.dirname(fileURLToPath(new URL('../index.js', import.meta.url).href)),
-		'config.cfg',
+		'config.json',
 	);
 
 	afterEach(async () => {
@@ -373,6 +406,111 @@ describe('config: save/load', () => {
 		expect(load('foo')).toBe('bar');
 		const txt = await fs.readFile(cfgPath, 'utf8');
 		expect(JSON.parse(txt)).toEqual({ foo: 'bar' });
+	});
+
+	it('throws TypeError when save() key is not a string', () => {
+		expect(() => save(null, 'value')).toThrow(TypeError);
+		expect(() => save(undefined, 'value')).toThrow(TypeError);
+		expect(() => save(123, 'value')).toThrow(TypeError);
+		expect(() => save({}, 'value')).toThrow(TypeError);
+		expect(() => save([], 'value')).toThrow(TypeError);
+	});
+
+	it('throws TypeError when save() key is an empty string', () => {
+		expect(() => save('', 'value')).toThrow(TypeError);
+		expect(() => save('', 'value')).toThrow(/non-empty string key/);
+	});
+
+	it('throws TypeError when load() key is not a string', () => {
+		expect(() => load(null)).toThrow(TypeError);
+		expect(() => load(undefined)).toThrow(TypeError);
+		expect(() => load(123)).toThrow(TypeError);
+		expect(() => load({})).toThrow(TypeError);
+		expect(() => load([])).toThrow(TypeError);
+	});
+
+	it('throws TypeError when load() key is an empty string', () => {
+		expect(() => load('')).toThrow(TypeError);
+		expect(() => load('')).toThrow(/non-empty string key/);
+	});
+
+	it('saves and loads null values', () => {
+		save('nullKey', null);
+		expect(load('nullKey')).toBeNull();
+	});
+
+	it('saves and loads boolean values', () => {
+		save('trueKey', true);
+		save('falseKey', false);
+		expect(load('trueKey')).toBe(true);
+		expect(load('falseKey')).toBe(false);
+	});
+
+	it('saves and loads number values including zero and negative', () => {
+		save('zero', 0);
+		save('negative', -42);
+		save('float', 3.14);
+		expect(load('zero')).toBe(0);
+		expect(load('negative')).toBe(-42);
+		expect(load('float')).toBe(3.14);
+	});
+
+	it('saves and loads deeply nested objects', () => {
+		const nested = {
+			level1: {
+				level2: {
+					level3: {
+						value: 'deep',
+						array: [1, 2, { nested: true }],
+					},
+				},
+			},
+		};
+		save('nested', nested);
+		expect(load('nested')).toEqual(nested);
+	});
+
+	it('saves and loads arrays with mixed types', () => {
+		const mixed = [1, 'two', true, null, { key: 'value' }, [1, 2]];
+		save('mixedArray', mixed);
+		expect(load('mixedArray')).toEqual(mixed);
+	});
+
+	it('saves and loads empty arrays and objects', () => {
+		save('emptyArray', []);
+		save('emptyObject', {});
+		expect(load('emptyArray')).toEqual([]);
+		expect(load('emptyObject')).toEqual({});
+	});
+
+	it('handles keys with special characters', () => {
+		save('key-with-dashes', 'value1');
+		save('key.with.dots', 'value2');
+		save('key_with_underscores', 'value3');
+		save('key with spaces', 'value4');
+		expect(load('key-with-dashes')).toBe('value1');
+		expect(load('key.with.dots')).toBe('value2');
+		expect(load('key_with_underscores')).toBe('value3');
+		expect(load('key with spaces')).toBe('value4');
+	});
+
+	it('handles corrupted JSON file gracefully in load()', async () => {
+		const cfgPath = path.join(
+			path.dirname(fileURLToPath(new URL('../index.js', import.meta.url).href)),
+			'config.json',
+		);
+		await fs.writeFile(cfgPath, '{invalid json', 'utf8');
+		expect(() => load('anyKey')).toThrow(SyntaxError);
+		await fs.rm(cfgPath);
+	});
+
+	it('preserves all keys when saving multiple values', () => {
+		save('key1', 'value1');
+		save('key2', 'value2');
+		save('key3', 'value3');
+		expect(load('key1')).toBe('value1');
+		expect(load('key2')).toBe('value2');
+		expect(load('key3')).toBe('value3');
 	});
 
 	it('accepts and returns object values', async () => {
@@ -394,6 +532,11 @@ describe('config: save/load', () => {
 	});
 
 	it('respects config path passed to init(opts)', async () => {
+		const origStdinTTY = process.stdin.isTTY;
+		const origStdoutTTY = process.stdout.isTTY;
+		process.stdin.isTTY = true;
+		process.stdout.isTTY = true;
+
 		vi.resetModules();
 		const { init: freshInit, save: freshSave } = await import('../index.js');
 		const customPath = path.join(
@@ -408,6 +551,144 @@ describe('config: save/load', () => {
 		const txt = await fs.readFile(customPath, 'utf8');
 		expect(JSON.parse(txt)).toEqual({ customKey: 'value' });
 		await fs.rm(customPath);
+
+		process.stdin.isTTY = origStdinTTY;
+		process.stdout.isTTY = origStdoutTTY;
+	});
+
+	it('handles empty config file in load()', async () => {
+		const cfgPath = path.join(
+			path.dirname(fileURLToPath(new URL('../index.js', import.meta.url).href)),
+			'config.json',
+		);
+		await fs.writeFile(cfgPath, '', 'utf8');
+		expect(load('anyKey')).toBeUndefined();
+		await fs.rm(cfgPath);
+	});
+
+	it('handles whitespace-only config file in load()', async () => {
+		const cfgPath = path.join(
+			path.dirname(fileURLToPath(new URL('../index.js', import.meta.url).href)),
+			'config.json',
+		);
+		await fs.writeFile(cfgPath, '   \n\t  ', 'utf8');
+		expect(load('anyKey')).toBeUndefined();
+		await fs.rm(cfgPath);
+	});
+});
+
+describe('type generation (storage.generated.d.ts)', () => {
+	const cfgPath = path.join(
+		path.dirname(fileURLToPath(new URL('../index.js', import.meta.url).href)),
+		'config.json',
+	);
+	const genPath = path.join(
+		path.dirname(fileURLToPath(new URL('../index.js', import.meta.url).href)),
+		'storage.generated.d.ts',
+	);
+
+	afterEach(async () => {
+		try {
+			await fs.rm(cfgPath);
+		} catch (e) {}
+		try {
+			await fs.rm(genPath);
+		} catch (e) {}
+	});
+
+	it('generates TypeScript types for string values', async () => {
+		save('name', 'John');
+		const content = await fs.readFile(genPath, 'utf8');
+		expect(content).toContain('interface StorageSchema');
+		expect(content).toContain('name: string');
+	});
+
+	it('generates TypeScript types for number values', async () => {
+		save('age', 42);
+		save('price', 19.99);
+		const content = await fs.readFile(genPath, 'utf8');
+		expect(content).toContain('age: number');
+		expect(content).toContain('price: number');
+	});
+
+	it('generates TypeScript types for boolean values', async () => {
+		save('enabled', true);
+		save('disabled', false);
+		const content = await fs.readFile(genPath, 'utf8');
+		expect(content).toContain('enabled: boolean');
+		expect(content).toContain('disabled: boolean');
+	});
+
+	it('generates TypeScript types for null values', async () => {
+		save('nullValue', null);
+		const content = await fs.readFile(genPath, 'utf8');
+		expect(content).toContain('nullValue: null');
+	});
+
+	it('generates TypeScript types for empty arrays', async () => {
+		save('emptyArr', []);
+		const content = await fs.readFile(genPath, 'utf8');
+		expect(content).toContain('emptyArr: unknown[]');
+	});
+
+	it('generates TypeScript types for homogeneous arrays', async () => {
+		save('numbers', [1, 2, 3]);
+		save('strings', ['a', 'b', 'c']);
+		const content = await fs.readFile(genPath, 'utf8');
+		expect(content).toContain('numbers: number[]');
+		expect(content).toContain('strings: string[]');
+	});
+
+	it('generates TypeScript types for arrays with mixed types', async () => {
+		save('mixed', [1, 'two', true]);
+		const content = await fs.readFile(genPath, 'utf8');
+		expect(content).toMatch(/mixed: \(.*\)\[\]/);
+		expect(content).toContain('number');
+		expect(content).toContain('string');
+		expect(content).toContain('boolean');
+	});
+
+	it('generates TypeScript types for empty objects', async () => {
+		save('emptyObj', {});
+		const content = await fs.readFile(genPath, 'utf8');
+		expect(content).toContain('emptyObj: Record<string, unknown>');
+	});
+
+	it('generates TypeScript types for shallow objects', async () => {
+		save('user', { name: 'Alice', age: 30, active: true });
+		const content = await fs.readFile(genPath, 'utf8');
+		expect(content).toContain('user:');
+		expect(content).toContain('name: string');
+		expect(content).toContain('age: number');
+		expect(content).toContain('active: boolean');
+	});
+
+	it('handles keys with special characters in generated types', async () => {
+		save('key-with-dash', 'value');
+		save('key with space', 'value');
+		const content = await fs.readFile(genPath, 'utf8');
+		// Keys that aren't valid identifiers should be quoted
+		expect(content).toContain('"key-with-dash": string');
+		expect(content).toContain('"key with space": string');
+	});
+
+	it('sorts keys alphabetically in generated types', async () => {
+		save('zebra', 1);
+		save('apple', 2);
+		save('banana', 3);
+		const content = await fs.readFile(genPath, 'utf8');
+		const appleIdx = content.indexOf('apple');
+		const bananaIdx = content.indexOf('banana');
+		const zebraIdx = content.indexOf('zebra');
+		expect(appleIdx).toBeLessThan(bananaIdx);
+		expect(bananaIdx).toBeLessThan(zebraIdx);
+	});
+
+	it('includes auto-generated comment header', async () => {
+		save('test', 'value');
+		const content = await fs.readFile(genPath, 'utf8');
+		expect(content).toContain('Auto-generated by maker');
+		expect(content).toContain('do not edit');
 	});
 });
 
@@ -450,39 +731,13 @@ describe('run() - additional edge cases', () => {
 		vi.resetModules();
 	});
 
-	it('handles null stdout stream gracefully', async () => {
+	it('handles null stdout and stderr streams gracefully', async () => {
 		vi.resetModules();
 		vi.doMock('child_process', () => ({
 			spawn: () => {
 				let closeCb;
 				const child = {
 					stdout: null,
-					stderr: { on: () => {} },
-					on: (ev, cb) => {
-						if (ev === 'close') closeCb = cb;
-					},
-				};
-				process.nextTick(() => {
-					if (closeCb) closeCb(0);
-				});
-				return child;
-			},
-		}));
-		const { run: mockedRun } = await import('../index.js');
-		const res = await mockedRun('anything');
-		expect(res.code).toBe(0);
-		expect(res.stdout).toBe('');
-		expect(res.isError).toBe(false);
-		vi.resetModules();
-	});
-
-	it('handles null stderr stream gracefully', async () => {
-		vi.resetModules();
-		vi.doMock('child_process', () => ({
-			spawn: () => {
-				let closeCb;
-				const child = {
-					stdout: { on: () => {} },
 					stderr: null,
 					on: (ev, cb) => {
 						if (ev === 'close') closeCb = cb;
@@ -497,12 +752,13 @@ describe('run() - additional edge cases', () => {
 		const { run: mockedRun } = await import('../index.js');
 		const res = await mockedRun('anything');
 		expect(res.code).toBe(0);
+		expect(res.stdout).toBe('');
 		expect(res.stderr).toBe('');
 		expect(res.isError).toBe(false);
 		vi.resetModules();
 	});
 
-	it('forwards opts directly to spawn (no alias)', async () => {
+	it('forwards opts including cwd, env, and shell to spawn', async () => {
 		vi.resetModules();
 		let captured;
 		vi.doMock('child_process', () => ({
@@ -522,40 +778,14 @@ describe('run() - additional edge cases', () => {
 		const res = await mockedRun('anything', {
 			cwd: '/tmp',
 			env: { FOO: 'bar' },
+			maxLines: 5, // Should be filtered out
+			shell: false,
 		});
 		expect(captured.cwd).toBe('/tmp');
 		expect(captured.env).toEqual(expect.objectContaining({ FOO: 'bar' }));
-		expect(captured.shell).toBe(true);
-		expect(captured.stdio).toBe('pipe');
-		expect(res.code).toBe(0);
-		vi.resetModules();
-	});
-
-	it('forwards top-level spawn options (maxLines is capture-only)', async () => {
-		vi.resetModules();
-		let captured;
-		vi.doMock('child_process', () => ({
-			spawn: (cmd, spawnOpts) => {
-				captured = spawnOpts;
-				const child = {
-					stdout: { on: () => {} },
-					stderr: { on: () => {} },
-					on: (ev, cb) => {
-						if (ev === 'close') cb(0);
-					},
-				};
-				return child;
-			},
-		}));
-		const { run: mockedRun } = await import('../index.js');
-		const res = await mockedRun('anything', {
-			cwd: '/cwd',
-			maxLines: 5,
-			shell: false,
-		});
-		expect(captured.cwd).toBe('/cwd');
-		expect(captured.maxLines).toBeUndefined();
 		expect(captured.shell).toBe(false);
+		expect(captured.stdio).toBe('pipe');
+		expect(captured.maxLines).toBeUndefined(); // maxLines should not be forwarded
 		expect(res.code).toBe(0);
 		vi.resetModules();
 	});
@@ -1201,18 +1431,6 @@ describe('run() - enhanced edge cases', () => {
 });
 
 describe('onExit() - enhanced edge cases', () => {
-	it('handles callback that returns a value (not a promise)', async () => {
-		const cb = vi.fn(() => 42);
-		const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {});
-		const off = onExit(cb);
-		process.emit('SIGINT');
-		await new Promise((r) => setTimeout(r, 10));
-		expect(cb).toHaveBeenCalled();
-		expect(exitSpy).toHaveBeenCalledWith(0);
-		off();
-		exitSpy.mockRestore();
-	});
-
 	it('handles callback throwing synchronously', async () => {
 		const cb = vi.fn(() => {
 			throw new Error('sync error');
@@ -1272,8 +1490,20 @@ describe('onExit() - enhanced edge cases', () => {
 		});
 		const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {});
 		const off = onExit(cb);
-		process.emit('SIGINT');
+		process.emit('SIGTERM'); // Test different signal
 		await new Promise((r) => setTimeout(r, 15));
+		expect(cb).toHaveBeenCalled();
+		expect(exitSpy).toHaveBeenCalledWith(0);
+		off();
+		exitSpy.mockRestore();
+	});
+
+	it('responds to SIGQUIT signal', async () => {
+		const cb = vi.fn(async () => {});
+		const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {});
+		const off = onExit(cb);
+		process.emit('SIGQUIT');
+		await new Promise((r) => setTimeout(r, 10));
 		expect(cb).toHaveBeenCalled();
 		expect(exitSpy).toHaveBeenCalledWith(0);
 		off();
